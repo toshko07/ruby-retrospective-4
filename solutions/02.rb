@@ -7,15 +7,12 @@ class NumberSet
     @numbers_array.each(&block)
   end
 
-  def initialize
-    @numbers_array = []
+  def initialize(numbers = [])
+    @numbers_array = numbers
   end
 
   def <<(number)
-    converted_number = number.to_c
-    unless @numbers_array.include?(converted_number)
-      @numbers_array << number
-    end
+    @numbers_array << number unless @numbers_array.include? number
   end
 
   def size
@@ -27,32 +24,46 @@ class NumberSet
   end
 
   def [](filter)
+    NumberSet.new @numbers_array.select { |number| filter.match? number }
   end
+
  end
 
 class Filter
-  def initialize
-   @filter_result =  yield
+  def initialize(&condition)
+   @filter_condition =  condition
+  end
+
+  def match?(number)
+    @filter_condition.call number
+  end
+
+  def &(other)
+    Filter.new { |number| match? number and other.match? number }
+  end
+
+  def |(other)
+    Filter.new { |number| match? number or other.match? number }
   end
 end
 
-class TypeFilter < NumberSet
+class TypeFilter < Filter
   def initialize(argument)
-   @type_filter_result = case arg
-    when :integer then select { |element| element.is_a? Integer }
-    when :real    then select { |element| element.is_a? Real or
-                                          element.is_a? Float }
-    when :complex then select { |element| element.is_a? Complex }
+    case argument
+    when :integer then super() { |element| element.is_a? Integer }
+    when :complex then super() { |element| element.is_a? Complex }
+    else super() { |number| number.is_a? Float or number.is_a? Rational }
+    end
   end
 end
-end
-class SignFilter < NumberSet
+
+class SignFilter < Filter
   def initialize(argument)
-   @sign_filter_result =  case arg
-    when :positive     then select { |element| element > 0 }
-    when :non_positive then select { |element| element <= 0 }
-    when :negative     then select { |element| element < 0 }
-    when :non_negative then select { |element| element >= 0 }
+    case argument
+    when :positive     then super() { |element| element > 0 }
+    when :non_positive then super() { |element| element <= 0 }
+    when :negative     then super() { |element| element < 0 }
+    when :non_negative then super() { |element| element >= 0 }
     end
   end
 end

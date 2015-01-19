@@ -1,36 +1,49 @@
 module RBFS
 
   class File
-    attr_accessor :data, :data_type
+    attr_accessor :data
 
     def initialize(data = nil)
       @data = data
-      if    @data.is_a?  String    then @data_type = :string
-      elsif @data.is_a? Symbol     then @data_type = :symbol
-      elsif @data.is_a? Fixnum     then @data_type = :number
-      elsif @data.is_a? Float      then @data_type = :number
-      elsif @data.is_a? TrueClass  then @data_type = :boolean
-      elsif @data.is_a? FalseClass then @data_type = :boolean
-      else                              @data_type = data
+    end
+
+    def data_type
+      case @data
+      when String  then :string
+      when Symbol  then :symbol
+      when Numeric then :number
+      when nil     then :nil
+      else              :boolean
       end
     end
 
     def serialize
-      @file_serialize = "#{@data_type.to_s}:#{@data}"
+      "#{data_type}:#{@data.to_s}"
     end
 
     def self.parse(string_data = nil)
-      data_type = string_data.split(":")[0]
-      data = string_data.split(":")[1]
-      if data_type == "symbol"     then File.new(data.to_sym)
-      elsif data_type == "string"  then File.new data
-      elsif data_type == "number"  then File.new(data.to_i)
-      elsif data_type == "boolean" then File.new(data == "true")
-      elsif  data.include?"."      then File.new(data.to_f)
-      else                              File.new
+      data = parse_data *string_data.split(':', 2)
+
+      File.new data
+    end
+
+    def self.parse_data(type, data)
+      case type
+      when 'nil'     then nil
+      when 'string'  then data
+      when 'number'  then parse_number(data)
+      when 'symbol'  then data.to_sym
+      else                data == 'true'
       end
     end
 
+    def self.parse_number(data)
+      if data.include? '.'
+        data.to_f
+      else
+        data.to_i
+      end
+    end
   end
 
   class Directory
@@ -65,17 +78,54 @@ module RBFS
     end
 
     def serialize
-      return_data = @files.size.to_s + ":"
-      @files.each do |key, value|
-        return_data += key.to_s + ":" + value.serialize.size.to_s + ":" + value.serialize
+      data = @files.size.to_s + ":"
+      @files.each do |key, val|
+        data += key.to_s + ":" + val.serialize.size.to_s + ":" + val.serialize
       end
-      return_data += @directories.size.to_s + ":"
-      @directories.each do |key, value|
-        return_data += key.to_s + ":" + value.serialize.size.to_s + ":" + value.serialize
+      data += @directories.size.to_s + ":"
+      @directories.each do |key, val|
+        data += key.to_s + ":" + val.serialize.size.to_s + ":" + val.serialize
       end
-      return_data
+      data
     end
 
+    def self.parse(data)
+      directory = new
+
+      DirectoryParser.new(data, directory).run
+
+      directory
+    end
   end
 
+  class DirectoryParser
+    def initialize(string, directory)
+      @string = string
+      @directory = directory
+    end
+
+    def run
+      each(File) do |name, object|
+        @directory.add_file(name, object)
+      end
+      each(Directory) do |name, object|
+        @directory.add_directory(name, object)
+      end
+    end
+
+    def each(type_class)
+      hash_size, @string = @string.split(':', 2)
+      hash_size.to_i.times do
+        yield parse_named_object(type_class)
+      end
+    end
+
+    def parse_named_object(type_class)
+      name, size, @string = @string.split(':', 3)
+      size = size.to_i
+      current_string, @string = [@string[0..size - 1], \
+      @string[size..-1]]
+      [name, type_class.parse(current_string)]
+    end
+  end
 end
